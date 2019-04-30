@@ -1,40 +1,27 @@
 # -*- coding: utf-8 -*-
-
 import numpy as np
-import random as r
 import pylab as p
 import copy
 
-# Valores iniciais
-cidades = 50
-geracoes = 1000
-tamanho_populacao = 200
+random = np.random
 
-# numero de votantes para decisao
-knum = 3
-
-# taxas mutacao
-taxa_elite = 0.2
-optaxa = 0.6
-taxa_crossover = 0.6
-taxa_muta = 0.1
-vizinhos_muta = 0.1
-
-def crossover(mae, pai):
+class Crossover:
     """ Baseado em
 http://en.wikipedia.org/wiki/Edge_recombination_operator and Pyevolve's
 Crossovers.G1DListCrossoverEdge method
     """
-    gmae = mae.copy()
-    gpai = pai.copy()
-    irma = []
-    irmao = []
 
-    def get_edges(ind):
+    def __init__(self, mama, papa):
+        self.mae = mama.copy()
+        self.pai = papa.copy()
+        self.sis = [0]
+        self.bro = [0]
+
+    def get_edges(self,ind):
         edg = {}
         ind_list = ind['dna']
         
-        for i in xrange(len(ind_list)):
+        for i in range(len(ind_list)):
             a, b = ind_list[i], ind_list[i-1]
             if a not in edg:
                 edg[a] = []
@@ -46,7 +33,7 @@ Crossovers.G1DListCrossoverEdge method
                 edg[b].append(a)
         return edg
     
-    def merge_edges(edge_a, edge_b):
+    def merge_edges(self,edge_a, edge_b):
         edges = {}
         for value, near in edge_a.items():
             for adj in near:
@@ -54,81 +41,56 @@ Crossovers.G1DListCrossoverEdge method
                     edges.setdefault(value, []).append(adj)
         return edges
     
-    def get_edges_composite(mom, dad):
-        mom_edges = get_edges(mom)
-        dad_edges = get_edges(dad)
-        return (mom_edges, dad_edges, merge_edges(mom_edges, dad_edges))
-    
-    mom_edges, dad_edges, merged_edges = get_edges_composite(gmae, gpai)
+    def get_edges_composite(self, mom, dad):
+        mom_edges = self.get_edges(mom)
+        dad_edges = self.get_edges(dad)
+        return (mom_edges, dad_edges, self.merge_edges(mom_edges, dad_edges))
 
-    for c, u in (irma, set(gmae['dna'])), (irmao, set(gpai['dna'])):
-        curr = None
-        for i in xrange(len(gmae['dna'])):
-            curr = r.choice(tuple(u)) if not curr else curr
-            c.append(curr)
-            u.remove(curr)
-            d = [v for v in merged_edges.get(curr, []) if v in u]
-            if d:
-                curr = r.choice(d)
-            else:
-                s = [v for v in mom_edges.get(curr, []) if v in u]
-                s += [v for v in dad_edges.get(curr, []) if v in u]
-                curr = r.choice(s) if s else None
+    def cross(self):
+        
+        mom_edges, dad_edges, merged_edges = self.get_edges_composite(self.mae, self.pai)
+        
+        for c, u in (self.sis, set(self.mae['dna'])),(self.bro, set(self.pai['dna'])):  
+            curr = None            
+            tamanho = len(u)
+            for i in range(tamanho):                
+                curr = random.choice(tuple(u)) if not curr else curr
+                c.append(curr)
+                u.remove(curr)                
+                d = [v for v in merged_edges.get(curr, []) if v in u]
+                if d:
+                    curr = random.choice(d)
+                else:
+                    s = [v for v in mom_edges.get(curr, []) if v in u]
+                    s += [v for v in dad_edges.get(curr, []) if v in u]
+                    curr = random.choice(s) if s else None
+
     # garante que sempre haverá um 0 no início do dna
-    pos0irma = irma.index(0)
-    irma[pos0sister] = irma[0]
-    irma[0] = 0
-    pos0brother = irmao.index(0)
-    irmao[pos0brother] = irmao[0]
-    irmao[0] = 0
+        pos0sis = self.sis.index(0)
+        self.sis[pos0sis] = self.sis[0]
+        self.sis[0] = 0
+        pos0bro = self.bro.index(0)
+        self.bro[pos0bro] = self.bro[0]
+        self.bro[0] = 0
     
-    irma0 = gmae.copy()
-    irmao0 = gpai.copy()
-    irma0['dna'] = irma
-    irmao0['dna'] = irmao
+        sis0 = self.mae.copy()
+        bro0 = self.pai.copy()
+        sis0['dna'] = self.sis
+        bro0['dna'] = self.bro
     
-    return (irma0, irmao0)
+        return (sis0, bro0)
 
 def mutate(guy):
     """ Mutation by sublist reversing """
-    inicio = r.choice(range(1,len(guy['dna'])-1))
-    fim = r.choice(range(inicio, len(guy['dna'])-1))
+    inicio = random.choice(range(1,len(guy['dna'])-1))
+    fim = random.choice(range(inicio, len(guy['dna'])-1))
     # invertemos a ordem dessa sublista
     aux = guy.copy()
     foo = aux['dna'][inicio:fim+1]
-    foo.reverse()
+    foo = foo[::-1]
     # trocamos a sublista antiga pela invertida
     aux['dna'][inicio:fim+1] = foo[:]
     return aux
-
-def fitness(guy):
-    return 1. / guy['score']
-
-def score(guy):
-    """ Scoring based on the sum of distances of all valid paths """
-    def dist(c1, c2):
-        p1 = cidades[c1]
-        p2 = cidades[c2]
-        return n.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-        #return n.abs(p2 - p1)
-    
-    s = 0
-    for i in xrange(len(guy['dna'])-1):
-        c1 = guy['dna'][i]
-        c2 = guy['dna'][i+1]
-        s = s + dist(c1, c2)
-    
-    return s
-
-def new_guy():
-    dna = range(1, cidades)
-    r.shuffle(dna)
-    
-    d = {'dna': [0] + dna,
-         'fitness': .0,
-         'score': .0,
-         'parents': []}
-    return d.copy()
 
 # PCA #########################################################################
 
@@ -137,7 +99,7 @@ def pca(data):
     
     # normalizamos a matriz de dados (X = X - mean) e dividimos pelo d.p.
     # X = (X - mean) / dp
-    for i in xxrange(data.shape[1]):
+    for i in range(data.shape[1]):
         # adiciono um valor irrisorio 0.001 no denominador para nao
         # dar divisao por zero
         data[:,i] = (data[:,i] - data[:,i].mean())/(data[:,i].std()+0.001)
@@ -175,81 +137,137 @@ def ellipse(x, y, a, b, angle, steps):
     Y = y + (a * cosalpha * sinbeta + b * sinalpha * cosbeta)
 
     ell = []
-    for i in xrange(steps):
+    for i in range(steps):
         ell.append([X[i], Y[i]])
 
     return np.array(ell)
 
-# Main loop ###################################################################
+class GeneticAlgorithm:
 
-num_elite = int(tamanho_populacao * taxa_elite)
-num_op = int(tamanho_populacao * optaxa)
-num_rand = int(tamanho_populacao - num_elite - num_op)
-print num_elite, num_op, num_rand
-cidades = ellipse(0, 0, 1, 1, 0, cidades+1)
+    def __init__(self, num_cidades = 50, geracoes = 1000,
+                 size_pop_ini= 50, taxa_elite = 0.2, optaxa = 0.6, taxa_crossover = 0.6,
+                 taxa_muta = 0.3, vizinhos_muta = 0.2, k = 5):
+        # Valores iniciais
+        self.num_cidades = num_cidades
+        self.geracoes = geracoes
+        self.size_pop_ini = size_pop_ini
+        # number of neighbors in order to do K-mean training and classification of the output
+        self.k = k
+        # taxas mutacao
+        self.taxa_elite = taxa_elite
+        self.optaxa = optaxa
+        self.taxa_crossover = taxa_crossover
+        self.taxa_muta = taxa_muta
+        self.vizinhos_muta = vizinhos_muta
+        self.population_init()
+        self.gera_cidades()
 
-clusters = []
+    def new_guy(self):
+        dna = np.arange(1, self.num_cidades)
+        random.shuffle(dna)        
+        d = {'dna': [0] + dna,
+             'fitness': .0,
+             'score': .0,
+             'parents': []}
+    
+        return d
+
+
+    def gera_cidades(self):
+        self.cidades = ellipse(0, 0, 1, 1, 0, self.num_cidades+1)
+
+#clusters = []
 
 # inicializa a população com novos indivíduos aleatórios
-pops = []
-pop = []
-for i in xrange(tamanho_populacao):
-    pop.append(new_guy())
 
-for generation in xrange(geracoes):
-    # copia a elite ('num_elite' primeiros) para a nova população
-    elite = []
-    new_pop = []
+    def population_init(self):
+        self.pops = []
+        self.pop = []
+        for i in range(self.size_pop_ini):
+            self.pop.append(self.new_guy())
+            
+    def fitness(self, guy):
+        return 1. / guy['score']
 
-    for i in xrange(num_elite):
-        elite.append(copy.deepcopy(pop[i]))
-        new_pop.append(copy.deepcopy(pop[i]))
+    def dist(self, c1, c2):
+        p1 = self.cidades[c1]
+        p2 = self.cidades[c2]
+        return np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
 
-    # aplica operadores de crossover e mutação apenas na elite, criando novos
-    for i in xrange(num_op/2):
-        # crossover: aplicado a dois elementos da elite, escolhidos ao acaso
-        mom = r.choice(elite)
-        dad = r.choice(elite)
-        sis = None
-        bro = None
-        if r.random() < taxa_crossover:
-            (sis, bro) = crossover(mom, dad)
-        else:
-            sis = copy.deepcopy(mom)
-            bro = copy.deepcopy(dad)
+    def score(self, guy):
+        """ Scoring based on the sum of distances of all valid paths 
+        """
+           #return n.abs(p2 - p1)    
+        s = 0
+        for i in range(len(guy['dna'])-1):
+            c1 = guy['dna'][i]
+            c2 = guy['dna'][i+1]
+            s = s + self.dist(c1, c2)
+    
+        return s
 
-        # mutation
-        if r.random() < taxa_muta:
-            sis = mutate(sis)
-            bro = mutate(bro)
+    def run(self):
+
+        num_elite = int(self.size_pop_ini * self.taxa_elite)
+        num_op = int(self.size_pop_ini * self.optaxa)
+        num_rand = int(self.size_pop_ini - num_elite - num_op)
+
+        for generation in range(self.geracoes):
+
+           # copia a elite ('num_elite' primeiros) para a nova população
+            self.elite = []
+            self.new_pop = []
+            for i in range(num_elite):
+                self.elite.append(copy.deepcopy(self.pop[i]))
+                self.new_pop.append(copy.deepcopy(self.pop[i]))
+
+            # aplica operadores de crossover e mutação apenas na elite, criando novos
+            for i in range(int(num_op/2)):
+                # crossover: aplicado a dois elementos da elite, escolhidos ao acaso                
+                mom = random.choice(self.elite)
+                dad = random.choice(self.elite)
+                sis = None
+                bro = None
+                if random.uniform() < self.taxa_crossover:
+                            
+                    (sis, bro) = Crossover(mom, dad).cross()
+                else:
+                    sis = copy.deepcopy(mom)
+                    bro = copy.deepcopy(dad)
+
+                # mutation
+                if random.uniform() < self.taxa_muta:
+                    sis = mutate(sis)                    
+                    bro = mutate(bro)                    
 
         # store parents
         #sis['parents'] = [dad, mom]
         #bro['parents'] = [mom, dad]
         
-        # store new guys in the new pop
-        new_pop.append(sis)
-        new_pop.append(bro)
+                # store new guys in the new pop
+                self.new_pop.append(sis)
+                self.new_pop.append(bro)
 
-    # o restante de new pop é obtido criando-se novos aleatórios
-    for i in xrange(num_rand):
-        ne = new_guy()
-        new_pop.append(ne)
+            # o restante de new pop é obtido criando-se novos aleatórios
+            for i in range(num_rand):
+                ne = self.new_guy()
+                self.new_pop.append(ne)
 
-    # calcula o custo de cada indivíduo
-    for i in xrange(tamanho_populacao):
-        sc = score(new_pop[i])
-        new_pop[i]['score'] = sc
+            # calcula o custo de cada indivíduo
+            for i in range(self.size_pop_ini):
+                sc = self.score(self.new_pop[i])
+                self.new_pop[i]['score'] = sc
 
-    # atualiza o fitness de cada indivíduo
-    for i in xrange(tamanho_populacao):
-        fi = fitness(new_pop[i])
-        new_pop[i]['fitness'] = fi
+            # atualiza o fitness de cada indivíduo
+            for i in range(self.size_pop_ini):
+                fi = self.fitness(self.new_pop[i])
+                self.new_pop[i]['fitness'] = fi
 
-    # sobrescreve a população antiga pela nova
-    pop = new_pop[:]
-
-    # clusteriza
+            # sobrescreve a população antiga pela nova
+            self.pop = self.new_pop[:]
+            self.size_pop_ini = len(self.pop)
+            
+    # *** TODO *** clusteriza
     # components = pca([guy['dna'] for guy in pop])
     # points = []
     # for i in xrange(len(components)):
@@ -257,34 +275,38 @@ for generation in xrange(geracoes):
     # ref = pop[i]
     # points.append(Point(coords, ref))
     # clusters = kmeans(points, 2, .05)
-
     # escolhe representante
-
-    # *** TODO ***
-
+     
     # ordenamos a população em função de seu fitness (maior -> menor)
-    pop.sort(key=lambda x: x['fitness'], reverse=True)
+            self.pop.sort(key=lambda x: x['fitness'], reverse=True)
+            self.pops.append({'generation': generation,
+                              'pop': self.pop,
+                              'best': self.pop[0],
+                              'best fitness': self.pop[0]['fitness'],
+                              'fitness avg': sum([x['fitness'] for x in self.pop]) / len(self.pop),
+                              'fitness min': min([x['fitness'] for x in self.pop]),
+                              'fitness max': max([x['fitness'] for x in self.pop]),
+                              'score avg': sum([x['score'] for x in self.pop]) / len(self.pop),
+                              'score min': min([x['score'] for x in self.pop]),
+                              'score max': max([x['score'] for x in self.pop])})
+          
 
-    pops.append({'generation': generation,
-                 'pop': pop,
-                 'best': pop[0],
-                 'best fitness': pop[0]['fitness'],
-                 'fitness avg': sum([x['fitness'] for x in pop]) / len(pop),
-                 'fitness min': min([x['fitness'] for x in pop]),
-                 'fitness max': max([x['fitness'] for x in pop]),
-                 'score avg': sum([x['score'] for x in pop]) / len(pop),
-                 'score min': min([x['score'] for x in pop]),
-                 'score max': max([x['score'] for x in pop])})
+            print ('*' * 10)
+            print('generation: ',generation)
+            print('best ',self.pop[0]['dna'])
+            print('best fitness: ',self.pop[0]['fitness'])
+            print('max fitness: ',max([x['fitness'] for x in self.pop])) 
 
 
-    print '*' * 10
-    print 'generation: ', generation
-    print 'best ', pop[0]['dna']
-    print 'best fitness: ', pop[0]['fitness']
-    print 'max fitness: ', max([x['fitness'] for x in pop])
+
+            
+model = GeneticAlgorithm(num_cidades = 40, geracoes = 1000,
+                         size_pop_ini= 50, taxa_elite = 0.2, optaxa = 0.6, taxa_crossover = 0.6,
+                         taxa_muta = 0.3, vizinhos_muta = 0.2, k = 5)
+model.run()
 
 
-# Fitness
+###### PLOT MODEL ######
 
 p.figure()
 x = []
@@ -293,7 +315,7 @@ yerr_max = []
 yerr_min = []
 ymin = []
 ymax = []
-for po in pops:
+for po in model.pops:
     x.append(po['generation'])
     y.append(po['fitness avg'])
     ymin.append(po['fitness min'])
@@ -315,7 +337,7 @@ yerr_max = []
 yerr_min = []
 ymin = []
 ymax = []
-for po in pops:
+for po in model.pops:
     x.append(po['generation'])
     y.append(po['score avg'])
     ymin.append(po['score min'])
