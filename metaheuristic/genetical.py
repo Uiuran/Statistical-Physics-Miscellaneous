@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Refatorado do codigo original de Vilson Vieira
 import numpy as np
 import pylab as p
 import copy
